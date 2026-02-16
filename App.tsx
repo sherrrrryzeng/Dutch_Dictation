@@ -1,9 +1,14 @@
 
 import React, { useState, useCallback, useMemo, useRef, useEffect } from 'react';
-import { Upload, FileAudio, CheckCircle2, XCircle, ArrowRight, Loader2, Music, Sparkles, RefreshCcw, Keyboard } from 'lucide-react';
+import { Upload, FileAudio, CheckCircle2, XCircle, ArrowRight, ArrowLeft, ChevronLeft, ChevronRight, Loader2, Music, Sparkles, RefreshCcw, Keyboard } from 'lucide-react';
 import { transcribeAndSegment } from './services/geminiService';
 import { AudioSegment, AppStatus } from './types';
 import AudioSlicerPlayer, { AudioSlicerPlayerHandle } from './components/AudioSlicerPlayer';
+
+interface DiffWord {
+  text: string;
+  isCorrect: boolean;
+}
 
 const App: React.FC = () => {
   const [status, setStatus] = useState<AppStatus>(AppStatus.IDLE);
@@ -13,7 +18,7 @@ const App: React.FC = () => {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [userInput, setUserInput] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
-  const [feedback, setFeedback] = useState<{ isCorrect: boolean; original: string } | null>(null);
+  const [feedback, setFeedback] = useState<{ isCorrect: boolean; original: string; diff?: DiffWord[] } | null>(null);
   const [error, setError] = useState<string | null>(null);
   
   const playerRef = useRef<AudioSlicerPlayerHandle>(null);
@@ -63,15 +68,34 @@ const App: React.FC = () => {
     }
   };
 
+  const cleanWord = (word: string) => {
+    return word.toLowerCase().replace(/[.,!?;:]/g, "").trim();
+  };
+
   const normalizeText = (text: string) => {
     return text.toLowerCase().replace(/[.,!?;:]/g, "").trim();
+  };
+
+  const generateDiff = (original: string, user: string): DiffWord[] => {
+    const originalWords = original.split(/\s+/);
+    const userWords = user.split(/\s+/).map(cleanWord);
+    
+    return originalWords.map((word, index) => {
+      const cleanedOriginal = cleanWord(word);
+      const isCorrect = userWords[index] === cleanedOriginal;
+      return { text: word, isCorrect };
+    });
   };
 
   const handleSubmit = useCallback(() => {
     if (!userInput.trim()) return;
     const current = segments[currentIndex];
-    const isCorrect = normalizeText(userInput) === normalizeText(current.sentence);
-    setFeedback({ isCorrect, original: current.sentence });
+    const normalizedUser = normalizeText(userInput);
+    const normalizedOriginal = normalizeText(current.sentence);
+    const isCorrect = normalizedUser === normalizedOriginal;
+    
+    const diff = generateDiff(current.sentence, userInput);
+    setFeedback({ isCorrect, original: current.sentence, diff });
   }, [userInput, segments, currentIndex]);
 
   const handleNext = useCallback(() => {
@@ -79,32 +103,36 @@ const App: React.FC = () => {
       setCurrentIndex(prev => prev + 1);
       setUserInput('');
       setFeedback(null);
-      // Explicit focus for the next sentence
       setTimeout(() => textareaRef.current?.focus(), 50);
     } else {
       setStatus(AppStatus.COMPLETED);
     }
   }, [currentIndex, segments.length]);
 
-  // Focus input helper
+  const handlePrev = useCallback(() => {
+    if (currentIndex > 0) {
+      setCurrentIndex(prev => prev - 1);
+      setUserInput('');
+      setFeedback(null);
+      setTimeout(() => textareaRef.current?.focus(), 50);
+    }
+  }, [currentIndex]);
+
   const focusInput = useCallback(() => {
     if (textareaRef.current) {
       textareaRef.current.focus();
     }
   }, []);
 
-  // Ensure focus when status or index changes
   useEffect(() => {
     if (status === AppStatus.PRACTICING) {
       focusInput();
     }
   }, [status, currentIndex, focusInput]);
 
-  // Global Keyboard Shortcuts
   useEffect(() => {
     const handleGlobalKeyDown = (e: KeyboardEvent) => {
       if (status !== AppStatus.PRACTICING) return;
-
       const isTyping = document.activeElement === textareaRef.current;
       
       // Space to play sentence if not focused on textarea
@@ -113,7 +141,7 @@ const App: React.FC = () => {
         playerRef.current?.play();
       }
 
-      // Enter logic for global consistency
+      // Enter logic
       if (e.key === 'Enter' && !e.shiftKey) {
         if (!isTyping) {
           if (feedback?.isCorrect) {
@@ -123,11 +151,24 @@ const App: React.FC = () => {
           }
         }
       }
+
+      // Navigation shortcuts (Left/Right)
+      // Only navigate if NOT typing (to allow arrow keys for cursor movement)
+      if (!isTyping) {
+        if (e.key === 'ArrowLeft') {
+          e.preventDefault();
+          handlePrev();
+        }
+        if (e.key === 'ArrowRight') {
+          e.preventDefault();
+          handleNext();
+        }
+      }
     };
 
     window.addEventListener('keydown', handleGlobalKeyDown);
     return () => window.removeEventListener('keydown', handleGlobalKeyDown);
-  }, [status, feedback, userInput, handleSubmit, handleNext]);
+  }, [status, feedback, userInput, handleSubmit, handleNext, handlePrev]);
 
   const handleTextareaKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -138,10 +179,20 @@ const App: React.FC = () => {
         handleSubmit();
       }
     }
-    // Allow Space to be a shortcut for Play even while focused if we use a modifier
     if (e.code === 'Space' && (e.ctrlKey || e.metaKey)) {
       e.preventDefault();
       playerRef.current?.play();
+    }
+    // Navigation inside textarea using Alt + Arrows to not conflict with cursor movement
+    if (e.altKey) {
+        if (e.key === 'ArrowLeft') {
+            e.preventDefault();
+            handlePrev();
+        }
+        if (e.key === 'ArrowRight') {
+            e.preventDefault();
+            handleNext();
+        }
     }
   };
 
@@ -154,7 +205,6 @@ const App: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col">
-      {/* Header */}
       <header className="bg-white border-b border-slate-200 sticky top-0 z-10 shadow-sm">
         <div className="max-w-4xl mx-auto px-4 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -254,13 +304,34 @@ const App: React.FC = () => {
         {status === AppStatus.PRACTICING && currentSegment && audioUrl && (
           <div className="max-w-2xl mx-auto space-y-8">
             <div className="bg-white p-8 rounded-3xl shadow-sm border border-slate-100 space-y-8">
-              <AudioSlicerPlayer 
-                ref={playerRef}
-                audioUrl={audioUrl}
-                startTime={currentSegment.startTime}
-                endTime={currentSegment.endTime}
-                onPlayEnd={focusInput}
-              />
+              
+              <div className="flex items-center justify-between w-full gap-4">
+                <button 
+                  onClick={handlePrev}
+                  disabled={currentIndex === 0}
+                  className="p-3 text-slate-400 hover:text-orange-500 hover:bg-orange-50 rounded-2xl transition-all disabled:opacity-20 disabled:cursor-not-allowed group"
+                  title="Previous Sentence (Left Arrow)"
+                >
+                  <ChevronLeft size={32} />
+                </button>
+
+                <AudioSlicerPlayer 
+                  ref={playerRef}
+                  audioUrl={audioUrl}
+                  startTime={currentSegment.startTime}
+                  endTime={currentSegment.endTime}
+                  onPlayEnd={focusInput}
+                />
+
+                <button 
+                  onClick={handleNext}
+                  disabled={currentIndex === segments.length - 1}
+                  className="p-3 text-slate-400 hover:text-orange-500 hover:bg-orange-50 rounded-2xl transition-all disabled:opacity-20 disabled:cursor-not-allowed"
+                  title="Next Sentence (Right Arrow)"
+                >
+                  <ChevronRight size={32} />
+                </button>
+              </div>
 
               <div className="space-y-4">
                 <div className="flex justify-between items-end">
@@ -268,8 +339,9 @@ const App: React.FC = () => {
                     <Keyboard size={16} />
                     Your Transcription
                   </div>
-                  <span className="text-[10px] text-slate-400 font-mono">
-                    [Space]: Play | [Enter]: Check/Next
+                  <span className="text-[10px] text-slate-400 font-mono text-right">
+                    [Space]: Play | [Enter]: Check/Next <br/>
+                    [Arrows]: Nav (when not typing)
                   </span>
                 </div>
                 <textarea
@@ -318,15 +390,24 @@ const App: React.FC = () => {
                       </h3>
                     </div>
                     
-                    {feedback.isCorrect && (
-                      <div className="space-y-2">
-                        <p className="text-sm font-bold opacity-60 uppercase tracking-widest">Sentence Reference</p>
-                        <p className="text-2xl font-semibold leading-relaxed">{feedback.original}</p>
+                    <div className="space-y-2">
+                      <p className="text-sm font-bold opacity-60 uppercase tracking-widest">
+                        {feedback.isCorrect ? 'Sentence Reference' : 'Correction Guide (Bold = Errors)'}
+                      </p>
+                      <div className="text-2xl font-semibold leading-relaxed flex flex-wrap gap-x-2">
+                        {feedback.diff?.map((word, i) => (
+                          <span 
+                            key={i} 
+                            className={`${!word.isCorrect ? 'text-red-600 font-extrabold underline decoration-2' : ''}`}
+                          >
+                            {word.text}
+                          </span>
+                        ))}
                       </div>
-                    )}
+                    </div>
 
                     {!feedback.isCorrect && (
-                      <p className="font-medium">Check your spelling or missing words and try again!</p>
+                      <p className="font-medium text-sm">Correct the red words and try again!</p>
                     )}
                   </div>
 
