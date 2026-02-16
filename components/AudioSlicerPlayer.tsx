@@ -23,6 +23,7 @@ const AudioSlicerPlayer = forwardRef<AudioSlicerPlayerHandle, AudioSlicerPlayerP
 }, ref) => {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
+  const checkTimeRef = useRef<(() => void) | null>(null);
 
   // Expose the play method to the parent
   useImperativeHandle(ref, () => ({
@@ -38,6 +39,11 @@ const AudioSlicerPlayer = forwardRef<AudioSlicerPlayerHandle, AudioSlicerPlayerP
   const handlePlay = () => {
     if (!audioRef.current) return;
     
+    // Cleanup previous listener if any
+    if (checkTimeRef.current) {
+      audioRef.current.removeEventListener('timeupdate', checkTimeRef.current);
+    }
+
     audioRef.current.currentTime = startTime;
     audioRef.current.play();
     setIsPlaying(true);
@@ -52,11 +58,22 @@ const AudioSlicerPlayer = forwardRef<AudioSlicerPlayerHandle, AudioSlicerPlayerP
         setIsPlaying(false);
         onPlayEnd?.();
         audioRef.current.removeEventListener('timeupdate', checkTime);
+        checkTimeRef.current = null;
       }
     };
 
+    checkTimeRef.current = checkTime;
     audioRef.current.addEventListener('timeupdate', checkTime);
   };
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (audioRef.current && checkTimeRef.current) {
+        audioRef.current.removeEventListener('timeupdate', checkTimeRef.current);
+      }
+    };
+  }, []);
 
   return (
     <div className="flex flex-col items-center gap-4">

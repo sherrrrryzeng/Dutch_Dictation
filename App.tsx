@@ -79,33 +79,42 @@ const App: React.FC = () => {
       setCurrentIndex(prev => prev + 1);
       setUserInput('');
       setFeedback(null);
-      // Re-focus textarea for next sentence
+      // Explicit focus for the next sentence
       setTimeout(() => textareaRef.current?.focus(), 50);
     } else {
       setStatus(AppStatus.COMPLETED);
     }
   }, [currentIndex, segments.length]);
 
+  // Focus input helper
+  const focusInput = useCallback(() => {
+    if (textareaRef.current) {
+      textareaRef.current.focus();
+    }
+  }, []);
+
+  // Ensure focus when status or index changes
+  useEffect(() => {
+    if (status === AppStatus.PRACTICING) {
+      focusInput();
+    }
+  }, [status, currentIndex, focusInput]);
+
   // Global Keyboard Shortcuts
   useEffect(() => {
     const handleGlobalKeyDown = (e: KeyboardEvent) => {
       if (status !== AppStatus.PRACTICING) return;
 
-      // Space to play sentence (if not focused on textarea, or use Alt+Space/Ctrl+Space)
-      // Actually, if we use just 'Space', we need to be careful if user is typing.
-      // Let's use 'Control + Space' or 'Alt + Space' for playback when focused, 
-      // or just 'Space' if not focused on any input.
-      const isTyping = document.activeElement?.tagName === 'TEXTAREA' || document.activeElement?.tagName === 'INPUT';
+      const isTyping = document.activeElement === textareaRef.current;
       
+      // Space to play sentence if not focused on textarea
       if (e.code === 'Space' && !isTyping) {
         e.preventDefault();
         playerRef.current?.play();
       }
 
-      // Enter logic
+      // Enter logic for global consistency
       if (e.key === 'Enter' && !e.shiftKey) {
-        // If they are in the textarea, they'll use handleKeyDown on the element.
-        // But for global consistency if they clicked away:
         if (!isTyping) {
           if (feedback?.isCorrect) {
             handleNext();
@@ -250,6 +259,7 @@ const App: React.FC = () => {
                 audioUrl={audioUrl}
                 startTime={currentSegment.startTime}
                 endTime={currentSegment.endTime}
+                onPlayEnd={focusInput}
               />
 
               <div className="space-y-4">
