@@ -1,0 +1,5 @@
+{
+  "name": "Dutch Dictation Master",
+  "description": "A professional tool for Dutch language learners to practice listening and transcription. Upload Dutch audio, and the app will slice it into sentences for step-by-step dictation practice with AI-powered feedback.",
+  "requestFramePermissions": []
+}
