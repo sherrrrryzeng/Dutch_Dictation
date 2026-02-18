@@ -8,15 +8,21 @@ export const transcribeAndSegment = async (audioBase64: string, mimeType: string
   const model = 'gemini-3-flash-preview';
   
   const prompt = `
-    You are an expert Dutch language instructor. 
-    Transcribe the provided Dutch audio and break it down into natural individual sentences. 
+    You are an expert Dutch language instructor. Your task is to segment this audio into natural, complete sentences for a dictation exercise.
     
-    CRITICAL INSTRUCTIONS FOR TIMESTAMPS:
-    1. Provide high-precision start and end timestamps in seconds (e.g., 12.45).
-    2. Ensure the end timestamp (endTime) is slightly generous (add about 0.3-0.5 seconds of padding) to ensure the final word or syllable of the sentence is NOT cut off.
-    3. The segments should cover the entire audio without skipping words.
+    CRITICAL SEGMENTATION RULES:
+    1. COMPLETE SENTENCES: A segment should be a single complete Dutch sentence. Do NOT cut sentences into fragments.
+    2. 10-SECOND LIMIT: Only split a sentence if it is over 10 seconds. Split ONLY at logical linguistic boundaries like commas or conjunctions.
+    3. NUMBERS: All numbers MUST be fully spelled out as words in Dutch (e.g., 'twaalf' instead of '12').
+    4. PUNCTUATION: Include proper Dutch punctuation.
     
-    The response must be a JSON array of objects.
+    CRITICAL TIMING & OVERLAP RULES (FOR ABSOLUTE COMPLETENESS):
+    1. START BUFFER: Set 'startTime' approximately 1.0 second BEFORE the first syllable starts. This is crucial to ensure the first word is never cut off.
+    2. END BUFFER: Set 'endTime' approximately 2.0 seconds AFTER the last syllable ends. This ensures the full cadence and trailing consonants are captured.
+    3. OVERLAP IS MANDATORY: Segments SHOULD overlap with each other. It is better to have the end of the previous sentence audible at the start of the next segment than to miss even one millisecond of the target sentence.
+    4. PRECISION: Provide timestamps in seconds with high precision.
+    
+    Return a JSON array of objects.
   `;
 
   try {
@@ -35,9 +41,9 @@ export const transcribeAndSegment = async (audioBase64: string, mimeType: string
           items: {
             type: Type.OBJECT,
             properties: {
-              sentence: { type: Type.STRING, description: "The Dutch sentence text." },
-              startTime: { type: Type.NUMBER, description: "Start time in seconds." },
-              endTime: { type: Type.NUMBER, description: "End time in seconds." }
+              sentence: { type: Type.STRING, description: "The full Dutch sentence or natural phrase." },
+              startTime: { type: Type.NUMBER, description: "Start time in seconds with 1.0s pre-roll." },
+              endTime: { type: Type.NUMBER, description: "End time in seconds with 2.0s post-roll." }
             },
             required: ["sentence", "startTime", "endTime"]
           }

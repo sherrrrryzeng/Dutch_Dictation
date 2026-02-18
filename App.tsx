@@ -73,13 +73,16 @@ const App: React.FC = () => {
   };
 
   const normalizeText = (text: string) => {
-    return text.toLowerCase().replace(/[.,!?;:]/g, "").trim();
+    return text.toLowerCase().replace(/[.,!?;:]/g, "").replace(/\s+/g, " ").trim();
   };
 
-  const generateDiff = (original: string, user: string): DiffWord[] => {
+  const generateDiff = (original: string, user: string, forceCorrect: boolean): DiffWord[] => {
     const originalWords = original.split(/\s+/);
-    const userWords = user.split(/\s+/).map(cleanWord);
+    if (forceCorrect) {
+      return originalWords.map(w => ({ text: w, isCorrect: true }));
+    }
     
+    const userWords = user.split(/\s+/).map(cleanWord);
     return originalWords.map((word, index) => {
       const cleanedOriginal = cleanWord(word);
       const isCorrect = userWords[index] === cleanedOriginal;
@@ -94,7 +97,8 @@ const App: React.FC = () => {
     const normalizedOriginal = normalizeText(current.sentence);
     const isCorrect = normalizedUser === normalizedOriginal;
     
-    const diff = generateDiff(current.sentence, userInput);
+    // If it's overall correct, force all words to be correct visually
+    const diff = generateDiff(current.sentence, userInput, isCorrect);
     setFeedback({ isCorrect, original: current.sentence, diff });
   }, [userInput, segments, currentIndex]);
 
@@ -104,10 +108,10 @@ const App: React.FC = () => {
       setUserInput('');
       setFeedback(null);
       setTimeout(() => textareaRef.current?.focus(), 50);
-    } else {
+    } else if (currentIndex === segments.length - 1 && feedback?.isCorrect) {
       setStatus(AppStatus.COMPLETED);
     }
-  }, [currentIndex, segments.length]);
+  }, [currentIndex, segments.length, feedback?.isCorrect]);
 
   const handlePrev = useCallback(() => {
     if (currentIndex > 0) {
@@ -153,7 +157,6 @@ const App: React.FC = () => {
       }
 
       // Navigation shortcuts (Left/Right)
-      // Only navigate if NOT typing (to allow arrow keys for cursor movement)
       if (!isTyping) {
         if (e.key === 'ArrowLeft') {
           e.preventDefault();
@@ -183,7 +186,7 @@ const App: React.FC = () => {
       e.preventDefault();
       playerRef.current?.play();
     }
-    // Navigation inside textarea using Alt + Arrows to not conflict with cursor movement
+    // Alt + Arrows for navigation within textarea
     if (e.altKey) {
         if (e.key === 'ArrowLeft') {
             e.preventDefault();
@@ -310,7 +313,7 @@ const App: React.FC = () => {
                   onClick={handlePrev}
                   disabled={currentIndex === 0}
                   className="p-3 text-slate-400 hover:text-orange-500 hover:bg-orange-50 rounded-2xl transition-all disabled:opacity-20 disabled:cursor-not-allowed group"
-                  title="Previous Sentence (Left Arrow)"
+                  title="Previous Sentence (Left Arrow / Alt+Left)"
                 >
                   <ChevronLeft size={32} />
                 </button>
@@ -327,7 +330,7 @@ const App: React.FC = () => {
                   onClick={handleNext}
                   disabled={currentIndex === segments.length - 1}
                   className="p-3 text-slate-400 hover:text-orange-500 hover:bg-orange-50 rounded-2xl transition-all disabled:opacity-20 disabled:cursor-not-allowed"
-                  title="Next Sentence (Right Arrow)"
+                  title="Next Sentence (Right Arrow / Alt+Right)"
                 >
                   <ChevronRight size={32} />
                 </button>
@@ -341,7 +344,7 @@ const App: React.FC = () => {
                   </div>
                   <span className="text-[10px] text-slate-400 font-mono text-right">
                     [Space]: Play | [Enter]: Check/Next <br/>
-                    [Arrows]: Nav (when not typing)
+                    [Arrows]: Nav | [Alt+Arrows]: Nav in text
                   </span>
                 </div>
                 <textarea

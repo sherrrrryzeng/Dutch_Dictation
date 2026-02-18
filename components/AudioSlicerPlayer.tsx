@@ -32,7 +32,8 @@ const AudioSlicerPlayer = forwardRef<AudioSlicerPlayerHandle, AudioSlicerPlayerP
 
   useEffect(() => {
     if (audioRef.current) {
-      audioRef.current.currentTime = startTime;
+      // Pre-position the audio head to the start time (with the 1s buffer)
+      audioRef.current.currentTime = Math.max(0, startTime);
     }
   }, [startTime]);
 
@@ -44,16 +45,14 @@ const AudioSlicerPlayer = forwardRef<AudioSlicerPlayerHandle, AudioSlicerPlayerP
       audioRef.current.removeEventListener('timeupdate', checkTimeRef.current);
     }
 
-    audioRef.current.currentTime = startTime;
+    // Set start time exactly as provided by Gemini (which now includes the 1s pre-roll)
+    audioRef.current.currentTime = Math.max(0, startTime);
     audioRef.current.play();
     setIsPlaying(true);
     onPlayStart?.();
 
-    // Adding a tiny extra duration (0.2s) just in case the AI timestamp is too tight
-    const paddedEndTime = endTime + 0.2;
-
     const checkTime = () => {
-      if (audioRef.current && audioRef.current.currentTime >= paddedEndTime) {
+      if (audioRef.current && audioRef.current.currentTime >= endTime) {
         audioRef.current.pause();
         setIsPlaying(false);
         onPlayEnd?.();
@@ -77,7 +76,7 @@ const AudioSlicerPlayer = forwardRef<AudioSlicerPlayerHandle, AudioSlicerPlayerP
 
   return (
     <div className="flex flex-col items-center gap-4">
-      <audio ref={audioRef} src={audioUrl} className="hidden" />
+      <audio ref={audioRef} src={audioUrl} className="hidden" preload="auto" />
       <div className="flex gap-4">
         <button
           onClick={handlePlay}
@@ -91,7 +90,6 @@ const AudioSlicerPlayer = forwardRef<AudioSlicerPlayerHandle, AudioSlicerPlayerP
         <button
           onClick={() => {
             if (audioRef.current) {
-              audioRef.current.currentTime = startTime;
               handlePlay();
             }
           }}
@@ -101,8 +99,8 @@ const AudioSlicerPlayer = forwardRef<AudioSlicerPlayerHandle, AudioSlicerPlayerP
           <RotateCcw size={20} />
         </button>
       </div>
-      <p className="text-xs text-slate-400 font-medium">
-        {startTime.toFixed(1)}s — {endTime.toFixed(1)}s
+      <p className="text-[10px] text-slate-400 font-mono tracking-tighter">
+        {startTime.toFixed(2)}s — {endTime.toFixed(2)}s
       </p>
     </div>
   );
