@@ -69,11 +69,20 @@ const App: React.FC = () => {
   };
 
   const cleanWord = (word: string) => {
-    return word.toLowerCase().replace(/[.,!?;:]/g, "").trim();
+    return word.toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[.,!?;:]/g, "")
+      .trim();
   };
 
   const normalizeText = (text: string) => {
-    return text.toLowerCase().replace(/[.,!?;:]/g, "").replace(/\s+/g, " ").trim();
+    return text.toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[.,!?;:]/g, "")
+      .replace(/\s+/g, " ")
+      .trim();
   };
 
   const generateDiff = (original: string, user: string, forceCorrect: boolean): DiffWord[] => {
